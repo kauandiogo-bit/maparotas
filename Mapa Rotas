@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Rotas e Ocorrências</title>
+  
+  <link rel="icon" type="image/png" href="https://maps.gstatic.com/mapfiles/maps_lite/images/2x/navigation_24px.png" />
+
+  <!-- Leaflet Core -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Draw Plugin -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background-color: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ===== TELA DE LOGIN ===== */
+    .tela-login {
+      position: fixed; inset: 0; z-index: 50000;
+      background: radial-gradient(circle at top, #1e293b 0%, #0f172a 70%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tela-login.hidden { display: none !important; }
+    .login-card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+      padding: 28px 26px; width: 100%; max-width: 380px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+    }
+    .login-card h1 { font-size: 18px; color: #f8fafc; margin-bottom: 4px; }
+    .login-card p.sub { font-size: 11px; color: #94a3b8; margin-bottom: 18px; }
+    .login-card label { font-size: 10px; color: #94a3b8; font-weight: bold; display: block; margin-bottom: 4px; text-transform: uppercase; }
+    .login-card input {
+      width: 100%; height: 38px; padding: 0 10px; border-radius: 7px;
+      background: #0f172a; border: 1px solid #334155; color: #f1f5f9;
+      font-size: 13px; outline: none; margin-bottom: 12px;
+    }
+    .login-card input:focus { border-color: #3b82f6; }
+    .login-card button.primario {
+      width: 100%; height: 40px; border: none; border-radius: 7px;
+      background: #2563eb; color: #fff; font-weight: bold; font-size: 13px;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .login-card button.primario:hover { background: #1d4ed8; }
+    .login-card button.primario:disabled { opacity: 0.6; cursor: not-allowed; }
+    .login-erro { color: #f87171; font-size: 11px; margin-top: 8px; min-height: 14px; }
+    .login-aviso { color: #fbbf24; font-size: 11px; margin-bottom: 10px; }
+
+    /* ===== RESTO DO PAINEL ===== */
+    header { background-color: #1e293b; padding: 8px 16px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
+    .titulo-box h1 { font-size: 15px; color: #f8fafc; font-weight: bold; }
+
+    .aba-nav-item { padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; color: #94a3b8; border: 1px solid transparent; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 4px; }
+    .aba-nav-item.ativa { background-color: #2563eb; color: #ffffff; border-color: #3b82f6; }
+    .aba-nav-item:hover:not(.ativa) { background-color: #334155; color: #f8fafc; }
+
+    .painel-filtros { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    
+    .btn-filt, select, input[type="text"], input[type="date"] { 
+      background-color: #0f172a; 
+      border: 1px solid #334155; 
+      color: #f1f5f9; 
+      font-size: 11px; 
+      height: 32px; 
+      padding: 0 10px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      outline: none; 
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .btn-filt:hover, select:hover, input[type="date"]:hover { background-color: #1e293b; border-color: #475569; }
+
+    .legenda-bar { background-color: rgba(30, 41, 59, 0.8); padding: 6px 20px; border-bottom: 1px solid #334155; display: flex; gap: 15px; font-size: 10px; align-items: center; flex-shrink: 0; }
+    .dot-legenda { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+    .main-container { flex: 1; display: flex; overflow: hidden; position: relative; height: calc(100vh - 85px); }
+    
+    #mapWrapper { 
+      width: 55%; 
+      height: 100%; 
+      position: relative; 
+      border-right: 1px solid #1e293b; 
+      transition: width 0.3s ease-in-out;
+    }
+
+    #map { position: absolute; top:0; bottom:0; left:0; right:0; z-index: 1; }
+
+    #areaRelatorioPdf { 
+      width: 45%; 
+      height: 100%; 
+      background-color: #0f172a; 
+      display: flex; 
+      flex-direction: column; 
+      transition: width 0.3s ease-in-out, opacity 0.2s ease;
+      overflow: hidden;
+    }
+
+    .main-container.painel-recolhido #mapWrapper { width: 100% !important; border-right: none; }
+    .main-container.painel-recolhido #areaRelatorioPdf { width: 0% !important; opacity: 0; pointer-events: none; }
+
+    .btn-toggle-painel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 9999;
+      background-color: #1e293b;
+      color: #38bdf8;
+      border: 1px solid #334155;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .btn-toggle-painel:hover { background-color: #334155; color: #ffffff; transform: scale(1.03); }
+
+    .header-tabela { padding: 12px; background-color: rgba(30, 41, 59, 0.5); border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; }
+    .tabela-container { flex: 1; overflow-y: auto; padding: 8px; }
+
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10px; }
+    th { position: sticky; top: 0; background-color: #1e293b; color: #94a3b8; padding: 8px 6px; text-transform: uppercase; font-size: 9px; font-weight: bold; z-index: 10; border-bottom: 1px solid #334155; }
+    td { padding: 8px 6px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+    tr:hover { background-color: rgba(30, 41, 59, 0.8); }
+
+    .badge-id-os {
+      font-weight: 800; font-size: 10px; color: #38bdf8; background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3); padding: 1px 5px; border-radius: 4px;
+      display: inline-block; margin-bottom: 2px;
+    }
+
+    .custom-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #ffffff; transition: all 0.2s ease; opacity: 0.4; }
+    .custom-dot-ativo { opacity: 1 !important; transform: scale(1.2); z-index: 999; }
+
+    .custom-dot-inviavel {
+      width: 16px;
+      height: 16px;
+      background-color: #ef4444 !important;
+      border: 2px solid #ffffff;
+      transform: rotate(45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);
+      opacity: 0.8;
+      z-index: 998;
+    }
+    .custom-dot-ativo.custom-dot-inviavel {
+      opacity: 1 !important;
+      transform: rotate(45deg) scale(1.3);
+      box-shadow: 0 0 14px rgba(239, 68, 68, 1);
+    }
+
+    .dot-datacenter { background-color: #2563eb; }
+    .dot-torre      { background-color: #9333ea; }
+    .dot-loja       { background-color: #16a34a; }
+    .dot-estoque    { background-color: #d97706; }
+    .dot-outros     { background-color: #ef4444; }
+    
+    .custom-dot-ativo.dot-datacenter { box-shadow: 0 0 12px rgba(37, 99, 235, 1); }
+    .custom-dot-ativo.dot-torre      { box-shadow: 0 0 12px rgba(147, 51, 234, 1); }
+    .custom-dot-ativo.dot-loja       { box-shadow: 0 0 12px rgba(22, 163, 74, 1); }
+    .custom-dot-ativo.dot-estoque    { box-shadow: 0 0 12px rgba(217, 119, 6, 1); }
+    .custom-dot-ativo.dot-outros     { box-shadow: 0 0 12px rgba(239, 68, 68, 1); }
+
+    .ponto-agendado-preto {
+      background-color: #000000 !important;
+    }
+    .custom-dot-ativo.ponto-agendado-preto {
+      box-shadow: 0 0 12px rgba(0, 0, 0, 1);
+    }
+
+    .dot-partida    { background-color: #f59e0b; border: 2px solid #fff; box-shadow: 0 0 14px rgba(245, 158, 11, 1); width: 22px; height: 22px; opacity: 1 !important; z-index: 1000; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+
+    .dropdown-menu-box { position: absolute; top: 100%; left: 0; margin-top: 4px; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 8px; max-height: 250px; overflow-y: auto; z-index: 100; min-width: 180px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+    .dropdown-menu-box.hidden { display: none; }
+
+    .badge-btn { background-color: rgba(37, 99, 235, 0.2); color: #60a5fa; border: 1px solid rgba(37, 99, 235, 0.3); font-weight: bold; border-radius: 6px; padding: 0 10px; height: 32px; display: inline-flex; align-items: center; font-size: 11px; }
+    .badge-semgps { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: bold; border-radius: 6px; padding: 0 10px; height: 32px; display: inline-flex; align-items: center; font-size: 11px; cursor: pointer; }
+
+    .grid-calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 10px; flex: 1; }
+    .cal-day-box {
+      min-height: 110px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 8px;
+      display: flex; flex-direction: column; justify-content: space-between; transition: all 0.2s ease;
+    }
+    .cal-day-box:hover { border-color: #60a5fa; background: #26334d; }
+    .cal-day-box.hoje-highlight { border-color: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
+    .badge-equipe-pilula {
+      display: block; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 5px;
+      margin-top: 4px; cursor: pointer; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.4); transition: transform 0.1s ease;
+    }
+    .badge-equipe-pilula:hover { transform: scale(1.05); }
+
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);
+      z-index: 10000; display: flex; align-items: center; justify-content: center;
+    }
+    .modal-overlay.hidden { display: none !important; }
+    .modal-box {
+      background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+      width: 90%; max-width: 650px; max-height: 85vh; overflow-y: auto;
+      padding: 16px; color: #f8fafc; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px; margin-bottom: 12px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; }
+    .modal-item { background: #0f172a; padding: 8px; border-radius: 6px; border: 1px solid #334155; }
+    .modal-item.full { grid-column: span 2; }
+    .modal-item label { color: #94a3b8; font-size: 10px; font-weight: bold; display: block; margin-bottom: 2px; text-transform: uppercase; }
+
+    .apenas-impressao-pdf { display: none; }
+
+    .topo-usuario {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #94a3b8; font-weight: bold;
+    }
+    .topo-usuario .nome-user { color: #38bdf8; }
+    .btn-sair {
+      background: transparent; border: 1px solid #ef4444; color: #f87171;
+      padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
+    }
+    .btn-sair:hover { background: #ef4444; color: #fff; }
+
+    @media print {
+      html, body { height: auto !important; overflow: visible !important; background: white !important; color: black !important; }
+      header, #mapWrapper, .no-print, .legenda-bar, .btn-toggle-painel, .modal-overlay, .col-dias-tela, .col-acoes-tela, #secaoAgenda, .tela-login { display: none !important; }
+      .col-pdf-only { display: table-cell !important; }
+      .main-container { display: block !important; height: auto !important; overflow: visible !important; }
+      #areaRelatorioPdf { width: 100% !important; height: auto !important; background: white !important; color: black !important; display: block !important; opacity: 1 !important; }
+      .tabela-container { height: auto !important; max-height: none !important; overflow: visible !important; }
+      table { width: 100% !important; border-collapse: collapse !important; color: black !important; page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      th, td { border: 1px solid #cbd5e1 !important; padding: 6px !important; color: black !important; }
+      th { background-color: #f1f5f9 !important; }
+      .badge-id-os { background: none !important; border: none !important; color: black !important; padding: 0 !important; font-weight: bold !important; }
+      .apenas-impressao-pdf { display: block !important; page-break-before: always; margin-top: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= TELA DE LOGIN ================= -->
+  <div id="telaLogin" class="tela-login">
+    <div class="login-card">
+      <h1>🔐 Acesso ao Painel</h1>
+      <p class="sub">Informe seu login e senha para continuar.</p>
+
+      <div id="loginAvisoTroca" class="login-aviso" style="display:none;">
+        Primeiro acesso detectado. Você precisa definir uma nova senha.
+      </div>
+
+      <label>Login</label>
+      <input type="text" id="loginUsuario" autocomplete="username" placeholder="seu.login">
+
+      <label>Senha</label>
+      <input type="password" id="loginSenha" autocomplete="current-password" placeholder="••••••••">
+
+      <!-- Campos de troca de senha (aparecem só quando necessário) -->
+      <div id="blocoTrocaSenha" style="display:none;">
+        <label>Nova senha</label>
+        <input type="password" id="loginNovaSenha" placeholder="mínimo 4 caracteres">
+        <label>Confirmar nova senha</label>
+        <input type="password" id="loginNovaSenha2" placeholder="repita a nova senha">
+      </div>
+
+      <button class="primario" id="btnLogin" onclick="executarLogin()">Entrar</button>
+      <div class="login-erro" id="loginErro"></div>
+    </div>
+  </div>
+
+  <!-- CABEÇALHO -->
+  <header class="no-print">
+    <div class="titulo-box">
+      <h1>Painel de Rotas e Ocorrências</h1>
+    </div>
+
+    <div style="display: flex; gap: 4px; background: #0f172a; padding: 3px; border-radius: 8px; border: 1px solid #334155;">
+      <div id="btnAbaMapa" onclick="alternarAbaPrincipal('mapa')" class="aba-nav-item ativa">Mapa & Rotas</div>
+      <div id="btnAbaAgenda" onclick="alternarAbaPrincipal('agenda')" class="aba-nav-item">Agenda Planejamento</div>
+    </div>
+
+    <div class="topo-usuario">
+      <span>👤 <span class="nome-user" id="lblUsuarioLogado">—</span></span>
+      <button class="btn-sair" onclick="fazerLogout()">Sair</button>
+    </div>
+
+    <div class="painel-filtros" id="barFiltrosTopo">
+      
+      <div style="position: relative;" class="dropdown-multiselect">
+        <button onclick="toggleDropdown('menuUf', event)" class="btn-filt">
+          <span id="txtBtnUf">Todas UFs</span> ▼
+        </button>
+        <div id="menuUf" class="dropdown-menu-box hidden">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px; font-size: 10px;">
+            <b style="color: #94a3b8;">UFs</b>
+            <div>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkUf', true)" style="color:#60a5fa; margin-right:8px;">Marcar</a>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkUf', false)" style="color:#fbbf24;">Limpar</a>
+            </div>
+          </div>
+          <div id="containerCheckboxesUf"></div>
+        </div>
+      </div>
+
+      <div style="position: relative;" class="dropdown-multiselect">
+        <button onclick="toggleDropdown('menuCidade', event)" class="btn-filt">
+          <span id="txtBtnCidade">Todas Cidades</span> ▼
+        </button>
+        <div id="menuCidade" class="dropdown-menu-box hidden" style="width: 220px;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px; font-size: 10px;">
+            <b style="color: #94a3b8;">Cidades</b>
+            <div>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkCidade', true)" style="color:#60a5fa; margin-right:8px;">Marcar</a>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkCidade', false)" style="color:#fbbf24;">Limpar</a>
+            </div>
+          </div>
+          <input type="text" id="inputBuscaCidadeDrop" oninput="filtrarListaCidadesNoDrop()" placeholder="Pesquisar cidade..." style="width: 100%; margin-bottom: 6px; padding: 4px 6px;">
+          <div id="containerCheckboxesCidade" style="max-height: 150px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+      <div style="position: relative;" class="dropdown-multiselect">
+        <button onclick="toggleDropdown('menuTipos', event)" class="btn-filt">
+          <span id="txtBtnTipos">Todos os Tipos</span> ▼
+        </button>
+        <div id="menuTipos" class="dropdown-menu-box hidden">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px; font-size: 10px;">
+            <b style="color: #94a3b8;">Tipos</b>
+            <div>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkTipo', true)" style="color:#60a5fa; margin-right:8px;">Marcar</a>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkTipo', false)" style="color:#fbbf24;">Limpar</a>
+            </div>
+          </div>
+          <div id="containerCheckboxesTipos"></div>
+        </div>
+      </div>
+
+      <div style="position: relative;" class="dropdown-multiselect">
+        <button onclick="toggleDropdown('menuSituacao', event)" class="btn-filt">
+          <span id="txtBtnSituacao">Todas Situações</span> ▼
+        </button>
+        <div id="menuSituacao" class="dropdown-menu-box hidden">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 6px; font-size: 10px;">
+            <b style="color: #94a3b8;">Situação</b>
+            <div>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkSit', true)" style="color:#60a5fa; margin-right:8px;">Marcar</a>
+              <a href="javascript:void(0)" onclick="marcarGrupo('chkSit', false)" style="color:#fbbf24;">Limpar</a>
+            </div>
+          </div>
+          <div id="containerCheckboxesSit"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <span style="font-size: 10px; color: #94a3b8; font-weight: bold;">Backlog até:</span>
+        <input type="date" id="inputDataBacklog" onchange="aplicarFiltrosGlobais()" title="Filtrar pendências iniciadas até esta data">
+        <button onclick="limparFiltroDataBacklog()" class="btn-filt" style="padding: 0 6px; color: #f87171;" title="Limpar Data Limite">✕</button>
+      </div>
+
+      <button id="btnModoMedicao" onclick="toggleModoMedicao()" class="btn-filt" style="border-color: #10b981; color: #34d399;">
+        Medir Distância
+      </button>
+
+      <button id="btnModoRota" onclick="toggleModoRota()" class="btn-filt" style="border-color: #64748b; color: #e2e8f0;" title="Destaca em preto tudo que já está agendado, em qualquer data/equipe">
+        Modo Rota
+      </button>
+
+      <button id="btnExibirSemGps" onclick="filtrarApenasSemGps()" class="badge-semgps">
+        Sem GPS (<span id="txtQtdSemGps">0</span>)
+      </button>
+
+      <button onclick="limparTudoGeral()" class="btn-filt" style="color: #fbbf24; border-color: #fbbf24; font-weight: bold;">Limpar Tudo</button>
+      
+      <button onclick="carregarPontos()" class="btn-filt" style="background-color: #2563eb; font-weight: bold;">Atualizar</button>
+    </div>
+  </header>
+
+  <!-- LEGENDA DO MAPA -->
+  <div class="legenda-bar no-print" id="barraLegendaMap">
+    <b style="color: #94a3b8;">LEGENDA:</b>
+    <div id="legendaConteudoPontos" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+      <span><span class="dot-legenda" style="background:#f59e0b;"></span> Sede Matriz</span>
+      <span><span class="dot-legenda" style="background:#2563eb;"></span> Data Center</span>
+      <span><span class="dot-legenda" style="background:#9333ea;"></span> Torre / 5G</span>
+      <span><span class="dot-legenda" style="background:#16a34a;"></span> Loja / Shopping</span>
+      <span><span class="dot-legenda" style="background:#d97706;"></span> Estoque / CD</span>
+      <span><span class="dot-legenda" style="background:#ef4444;"></span> Outros</span>
+      <span style="color: #ef4444; font-weight: bold;"><span class="dot-legenda" style="background:#ef4444; border-radius:2px; transform: rotate(45deg);"></span> Inviável (Losango)</span>
+      <span style="color: #8b5cf6; font-weight: bold;"><span class="dot-legenda" style="background:rgba(139,92,246,0.3); border:1px dashed #8b5cf6;"></span> Área Agendada</span>
+      <span id="legendaModoRota" style="color: #e2e8f0; font-weight: bold; display: none;"><span class="dot-legenda" style="background:#000000; border:1px solid #fff;"></span> Já Agendado (Modo Rota)</span>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 1: PAINEL PRINCIPAL DO MAPA E TABELA -->
+  <div class="main-container" id="secaoMapaContainer">
+    
+    <div id="mapWrapper" class="no-print">
+      <button onclick="togglePainelLateral()" class="btn-toggle-painel" id="btnTogglePainel">
+        <span id="txtIconeToggle">▶</span> <span id="txtRotuloToggle">Ocultar Tabela</span>
+      </button>
+
+      <div id="map"></div>
+    </div>
+
+    <div id="areaRelatorioPdf">
+      <div class="header-tabela">
+        <div>
+          <h2 style="font-size: 13px; font-weight: bold;">RELATÓRIO DE OCORRÊNCIAS</h2>
+          <p id="subtituloSelecao" style="font-size: 11px; color: #94a3b8;">Exibindo dados carregados.</p>
+        </div>
+        <div class="no-print" style="display: flex; gap: 6px;">
+          <button onclick="abrirModalAgendarRota()" class="btn-filt" style="background-color: #8b5cf6; font-weight: bold;">Agendar Rota</button>
+          <button onclick="exportarParaCSV()" class="btn-filt" style="background-color: #2563eb; font-weight: bold;">CSV</button>
+          <button onclick="gerarRelatorioPDF()" class="btn-filt" style="background-color: #059669; font-weight: bold;">PDF</button>
+        </div>
+      </div>
+
+      <div class="tabela-container">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-pdf-only" style="display:none;">ID OS</th>
+              <th>Cidade / ID OS</th>
+              <th>Estabelecimento</th>
+              <th class="col-pdf-only" style="display:none;">Local Físico</th>
+              <th>Solicitação / Situação</th>
+              <th class="col-pdf-only" style="display:none;">Tipo Equipamento</th>
+              <th class="col-pdf-only" style="display:none;">Observação</th>
+              <th class="col-dias-tela">Dias</th>
+              <th class="col-acoes-tela" style="text-align:center;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabela">
+            <tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">Carregando pendências...</td></tr>
+          </tbody>
+        </table>
+
+        <div id="secaoRoteiroCampo" class="apenas-impressao-pdf">
+          <h3 style="font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Roteiro Sequencial de Viagem & Atendimento</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Etapa</th>
+                <th>Ponto / Localização</th>
+                <th>Cidade / UF</th>
+                <th>GPS (Lat, Lng)</th>
+                <th style="text-align: center;">Navegação</th>
+              </tr>
+            </thead>
+            <tbody id="corpoTabelaRoteiro"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="secaoAgenda" class="no-print" style="display: none; width: 100vw; height: calc(100vh - 50px); padding: 16px; background: #0f172a; flex-direction: column;">
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; height: 100%; display: flex; flex-direction: column; width: 100%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 12px; flex-shrink: 0;">
+        <div>
+          <h2 style="font-size: 18px; font-weight: bold; color: #f8fafc;">Calendário de Atendimentos & Rotas</h2>
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Clique na pílula da equipe para visualizar o Roteiro/PDF da rota ou arraste para reagendar.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button onclick="navegarMesCalendario(-1)" class="btn-filt">‹ Anterior</button>
+          <span id="txtMesAnoCalendario" style="font-size: 16px; font-weight: bold; color: #38bdf8; min-width: 160px; text-align: center;">Agosto 2026</span>
+          <button onclick="navegarMesCalendario(1)" class="btn-filt">Próximo ›</button>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: bold; color: #94a3b8; margin-top: 12px; text-transform: uppercase; flex-shrink: 0;">
+        <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+      </div>
+
+      <div id="gridDiasCalendario" class="grid-calendario"></div>
+    </div>
+  </div>
+
+  <div id="modalAgendarRota" class="modal-overlay hidden" onclick="fecharModalAgendarRota(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 style="font-size: 13px; font-weight: bold; color: #8b5cf6;">Agendar Rota de Atendimento</h3>
+        <button onclick="fecharModalAgendarRota()" style="background: none; border: none; color: #f87171; font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 11px;">
+        <p style="color: #94a3b8;">A data e o técnico serão gravados na planilha. O desenho no mapa será limpo para novas seleções.</p>
+        <div>
+          <label style="color: #94a3b8; font-weight: bold; display: block; margin-bottom: 2px;">DATA DO ATENDIMENTO</label>
+          <input type="date" id="inputDataAgendamentoModal" style="width: 100%;">
+        </div>
+        <div>
+          <label style="color: #94a3b8; font-weight: bold; display: block; margin-bottom: 2px;">EQUIPE / TÉCNICO RESPONSÁVEL</label>
+          <input type="text" id="inputEquipeModal" placeholder="Ex: Kelvin, Rennan, Fellipe..." style="width: 100%;">
+        </div>
+      </div>
+      <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button onclick="fecharModalAgendarRota()" class="btn-filt" style="background: #334155;">Cancelar</button>
+        <button onclick="confirmarAgendamentoRota()" class="btn-filt" style="background: #8b5cf6; font-weight: bold;">Confirmar Agendamento</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalRotaCalendario" class="modal-overlay hidden" onclick="fecharModalRotaCalendario(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="max-width: 750px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size: 14px; font-weight: bold; color: #38bdf8;" id="txtTituloModalRotaCal">Roteiro de Atendimento - Equipe</h3>
+          <p style="font-size: 11px; color: #94a3b8;" id="txtSubtituloModalRotaCal"></p>
+        </div>
+        <button onclick="fecharModalRotaCalendario()" style="background: none; border: none; color: #f87171; font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+      <div id="corpoModalRotaCal" style="max-height: 55vh; overflow-y: auto; margin-bottom: 14px;"></div>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #334155; padding-top: 10px;">
+        <button id="btnCancelarRotaAgendada" onclick="cancelarAgendamentoRotaCal()" class="btn-filt" style="background: #ef4444; color: #fff; font-weight: bold;">Cancelar Agendamento</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnConcluirRotaCal" onclick="concluirRotaCal()" class="btn-filt" style="background: #10b981; color: #fff; font-weight: bold;">Concluir Rota</button>
+          <button id="btnCarregarNoMapaCal" onclick="carregarRotaNoMapaEIr()" class="btn-filt" style="background: #2563eb; font-weight: bold;">Ver no Mapa</button>
+          <button onclick="imprimirPdfExclusivoAgenda()" class="btn-filt" style="background: #059669; font-weight: bold;">Imprimir Roteiro / PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalDetalhes" class="modal-overlay hidden" onclick="fecharModalDetalhes(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 style="font-size: 13px; font-weight: bold; color: #38bdf8;">Detalhes da Ocorrência</h3>
+        <button onclick="fecharModalDetalhes()" style="background: none; border: none; color: #f87171; font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+      
+      <div class="modal-grid">
+        <div class="modal-item">
+          <label>ID da OS</label>
+          <span id="modIdOS" style="font-weight: bold; color: #38bdf8;"></span>
+        </div>
+        <div class="modal-item">
+          <label>Estabelecimento</label>
+          <span id="modEstab" style="font-weight: bold;"></span>
+        </div>
+        <div class="modal-item">
+          <label>Cidade / UF</label>
+          <span id="modCidadeUf"></span>
+        </div>
+        <div class="modal-item">
+          <label>Local Físico</label>
+          <span id="modLocal"></span>
+        </div>
+        <div class="modal-item">
+          <label>Tipo de Localidade</label>
+          <span id="modTipoLocal" style="color: #60a5fa;"></span>
+        </div>
+        <div class="modal-item">
+          <label>Solicitação / Manutenção</label>
+          <span id="modSolicitacao" style="font-weight: bold;"></span>
+        </div>
+        <div class="modal-item">
+          <label>Situação</label>
+          <span id="modSituacao"></span>
+        </div>
+        <div class="modal-item">
+          <label>Tipo de Equipamento</label>
+          <span id="modTipoEquip"></span>
+        </div>
+        <div class="modal-item">
+          <label>Data Inicial</label>
+          <span id="modDataInicial"></span>
+        </div>
+        <div class="modal-item">
+          <label>Dias em Aberto</label>
+          <span id="modDiasPendente" style="color: #fbbf24; font-weight: bold;"></span>
+        </div>
+        <div class="modal-item">
+          <label>Plantonista</label>
+          <span id="modPlantonista"></span>
+        </div>
+        <div class="modal-item">
+          <label>Data Final / Conclusão</label>
+          <span id="modDataFinal"></span>
+        </div>
+        <div class="modal-item full">
+          <label>Observação do Equipamento</label>
+          <p id="modObservacao" style="color: #cbd5e1; font-style: italic; white-space: pre-wrap; margin-top: 2px;"></p>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; text-align: right;">
+        <button onclick="fecharModalDetalhes()" class="btn-filt" style="background: #334155;">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let map = null;
+    let drawnItems = null;
+    let camadaAreasAgendadas = null;
+    let todosOsPontos = [];
+    let pontosAtualmenteExibidos = [];
+    let idsExcluidosManual = new Set();
+    let camadaMarcadores = null;
+    let camadaLinhaGuiaSuave = null;
+    let camadaMedicaoDistancia = null;
+    
+    let modoMedicaoAtivo = false;
+    let modoRotaAtivo = false;
+    let pontosMedicao = [];
+    let formaDesenhadaAtiva = null;
+    let primeiraCargaGlobal = true;
+
+    let rotaAtivaCalData = null;
+    let rotaAtivaCalEquipe = null;
+
+    let mesAtualCal = 7;
+    let anoAtualCal = 2026;
+    const NOMES_MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+    let pontoPartida = {
+      nome: "Sede Matriz",
+      lat: -6.168818,
+      lng: -38.490160
+    };
+
+    let ufsDisponiveis = [];
+    let cidadesDisponiveis = [];
+    let tiposDisponiveis = [];
+    let situacoesDisponiveis = [];
+    let apenasModoSemGps = false;
+
+    // ===== SESSÃO =====
+    let sessaoToken = null;
+    let sessaoLogin = null;
+    let loginPendenteTroca = null; // guarda login quando precisa trocar senha
+
+    const coresEstados = {
+      "CE": "#3b82f6", "BA": "#f59e0b", "PE": "#10b981", "PB": "#8b5cf6",
+      "RN": "#ec4899", "AL": "#06b6d4", "SE": "#f97316", "PI": "#84cc16",
+      "MA": "#6366f1", "GO": "#14b8a6", "MS": "#a855f7"
+    };
+
+    const coresEquipes = {
+      "KELVIN": "background:#2563eb; color:#ffffff;",
+      "FELLIPE E RENNAN": "background:#059669; color:#ffffff;",
+      "JOHNSON E ERISON": "background:#7c3aed; color:#ffffff;",
+      "RENNAN": "background:#f59e0b; color:#0f172a;",
+      "RODRIGO": "background:#059669; color:#ffffff;"
+    };
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return str.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // ===== LOGIN =====
+    function executarLogin() {
+      const login = document.getElementById("loginUsuario").value.trim();
+      const senha = document.getElementById("loginSenha").value;
+      const erroEl = document.getElementById("loginErro");
+      const btn = document.getElementById("btnLogin");
+      const blocoTroca = document.getElementById("blocoTrocaSenha");
+
+      erroEl.innerText = "";
+
+      // Modo "troca de senha" já visível -> processar troca
+      if (blocoTroca.style.display !== "none") {
+        const nova = document.getElementById("loginNovaSenha").value;
+        const nova2 = document.getElementById("loginNovaSenha2").value;
+
+        if (nova.length < 4) { erroEl.innerText = "Nova senha muito curta."; return; }
+        if (nova !== nova2) { erroEl.innerText = "As senhas não conferem."; return; }
+
+        btn.disabled = true; btn.innerText = "Salvando...";
+        google.script.run
+          .withSuccessHandler(function(res) {
+            btn.disabled = false; btn.innerText = "Entrar";
+            if (!res.sucesso) { erroEl.innerText = res.mensagem; return; }
+
+            // Após trocar, volta pro login normal
+            document.getElementById("blocoTrocaSenha").style.display = "none";
+            document.getElementById("loginAvisoTroca").style.display = "none";
+            document.getElementById("loginSenha").value = "";
+            document.getElementById("loginNovaSenha").value = "";
+            document.getElementById("loginNovaSenha2").value = "";
+            loginPendenteTroca = null;
+            erroEl.style.color = "#34d399";
+            erroEl.innerText = "Senha alterada! Faça login com a nova senha.";
+            setTimeout(function() { erroEl.style.color = "#f87171"; erroEl.innerText = ""; }, 4000);
+          })
+          .withFailureHandler(function(e) {
+            btn.disabled = false; btn.innerText = "Entrar";
+            erroEl.innerText = "Erro: " + e.message;
+          })
+          .trocarSenha(loginPendenteTroca, senha, nova);
+
+        return;
+      }
+
+      if (!login || !senha) { erroEl.innerText = "Preencha login e senha."; return; }
+
+      btn.disabled = true; btn.innerText = "Entrando...";
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.innerText = "Entrar";
+
+          if (!res.sucesso) {
+            erroEl.innerText = res.mensagem || "Falha no login.";
+            return;
+          }
+
+          if (res.precisaTrocarSenha) {
+            loginPendenteTroca = res.login;
+            document.getElementById("loginAvisoTroca").style.display = "block";
+            document.getElementById("blocoTrocaSenha").style.display = "block";
+            document.getElementById("btnLogin").innerText = "Salvar nova senha";
+            erroEl.innerText = "";
+            return;
+          }
+
+          // Login OK
+          sessaoToken = res.token;
+          sessaoLogin = res.login;
+          document.getElementById("lblUsuarioLogado").innerText = res.login;
+          document.getElementById("telaLogin").classList.add("hidden");
+          iniciarPainel();
+        })
+        .withFailureHandler(function(e) {
+          btn.disabled = false; btn.innerText = "Entrar";
+          erroEl.innerText = "Erro: " + e.message;
+        })
+        .fazerLogin(login, senha);
+    }
+
+    function fazerLogout() {
+      if (sessaoToken) {
+        google.script.run.encerrarSessao(sessaoToken);
+      }
+      sessaoToken = null;
+      sessaoLogin = null;
+      todosOsPontos = [];
+      pontosAtualmenteExibidos = [];
+
+      document.getElementById("telaLogin").classList.remove("hidden");
+      document.getElementById("loginUsuario").value = "";
+      document.getElementById("loginSenha").value = "";
+      document.getElementById("loginNovaSenha").value = "";
+      document.getElementById("loginNovaSenha2").value = "";
+      document.getElementById("blocoTrocaSenha").style.display = "none";
+      document.getElementById("loginAvisoTroca").style.display = "none";
+      document.getElementById("btnLogin").innerText = "Entrar";
+      document.getElementById("loginErro").innerText = "";
+
+      // Esvazia tabela e camadas
+      document.getElementById("corpoTabela").innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">Faça login para visualizar.</td></tr>';
+      if (camadaMarcadores) camadaMarcadores.clearLayers();
+      if (camadaAreasAgendadas) camadaAreasAgendadas.clearLayers();
+    }
+
+    let painelIniciado = false;
+    function iniciarPainel() {
+      if (!painelIniciado) {
+        painelIniciado = true;
+        inicializarMapa();
+        document.addEventListener('click', function(e) {
+          if (!e.target.closest('.dropdown-multiselect')) {
+            document.querySelectorAll('.dropdown-menu-box').forEach(function(d) { d.classList.add('hidden'); });
+          }
+        });
+      } else {
+        setTimeout(function() { if (map) map.invalidateSize(); }, 200);
+      }
+      carregarPontos();
+    }
+
+    // ===== RESTO DO CÓDIGO (mantido) =====
+
+    function alternarAbaPrincipal(aba) {
+      const secMapa = document.getElementById("secaoMapaContainer");
+      const secAgenda = document.getElementById("secaoAgenda");
+      const btnMapa = document.getElementById("btnAbaMapa");
+      const btnAgenda = document.getElementById("btnAbaAgenda");
+      const filtros = document.getElementById("barFiltrosTopo");
+      const legenda = document.getElementById("barraLegendaMap");
+
+      if (aba === 'agenda') {
+        secMapa.style.display = "none";
+        secAgenda.style.display = "flex";
+        btnMapa.classList.remove("ativa");
+        btnAgenda.classList.add("ativa");
+        filtros.style.display = "none";
+        legenda.style.display = "none";
+        montarCalendarioAgenda();
+      } else {
+        secAgenda.style.display = "none";
+        secMapa.style.display = "flex";
+        btnAgenda.classList.remove("ativa");
+        btnMapa.classList.add("ativa");
+        filtros.style.display = "flex";
+        legenda.style.display = "flex";
+        setTimeout(function() { if (map) map.invalidateSize(); }, 200);
+      }
+    }
+
+    function togglePainelLateral() {
+      const container = document.getElementById("secaoMapaContainer");
+      const icone = document.getElementById("txtIconeToggle");
+      const rotulo = document.getElementById("txtRotuloToggle");
+
+      container.classList.toggle("painel-recolhido");
+      const estaRecolhido = container.classList.contains("painel-recolhido");
+
+      if (estaRecolhido) {
+        icone.innerText = "◀";
+        rotulo.innerText = "Exibir Tabela";
+      } else {
+        icone.innerText = "▶";
+        rotulo.innerText = "Ocultar Tabela";
+      }
+
+      setTimeout(function() { if (map) map.invalidateSize(); }, 310);
+    }
+
+    function inicializarMapa() {
+      map = L.map('map').setView([-6.168818, -38.490160], 8);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      carregarCamadaColoridaEstados();
+
+      drawnItems = new L.FeatureGroup();
+      map.addLayer(drawnItems);
+      camadaAreasAgendadas = L.featureGroup().addTo(map);
+      camadaLinhaGuiaSuave = L.featureGroup().addTo(map);
+      camadaMarcadores = L.featureGroup().addTo(map);
+      camadaMedicaoDistancia = L.featureGroup().addTo(map);
+
+      let drawControl = new L.Control.Draw({
+        draw: {
+          polyline: false, marker: false, circlemarker: false,
+          polygon: { allowIntersection: false, shapeOptions: { color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2 } },
+          rectangle: { shapeOptions: { color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2 } },
+          circle: { shapeOptions: { color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2 } }
+        },
+        edit: { featureGroup: drawnItems, remove: true }
+      });
+      map.addControl(drawControl);
+
+      map.on(L.Draw.Event.CREATED, function (e) {
+        drawnItems.clearLayers();
+        formaDesenhadaAtiva = e.layer;
+        drawnItems.addLayer(formaDesenhadaAtiva);
+        aplicarFiltrosGlobais();
+      });
+
+      map.on(L.Draw.Event.DELETED, function () {
+        limparSelecaoDesenho();
+      });
+
+      map.on('click', function(e) {
+        if (!modoMedicaoAtivo) return;
+        processarCliqueMedicao(e.latlng);
+      });
+
+      setTimeout(function() { if (map) map.invalidateSize(); }, 400);
+    }
+
+    function toggleModoMedicao() {
+      modoMedicaoAtivo = !modoMedicaoAtivo;
+      pontosMedicao = [];
+      camadaMedicaoDistancia.clearLayers();
+
+      const btn = document.getElementById("btnModoMedicao");
+      if (modoMedicaoAtivo) {
+        btn.style.backgroundColor = "#10b981";
+        btn.style.color = "#ffffff";
+        btn.innerText = "Clique em 2 pontos...";
+      } else {
+        btn.style.backgroundColor = "";
+        btn.style.color = "#34d399";
+        btn.innerText = "Medir Distância";
+      }
+    }
+
+    function toggleModoRota() {
+      modoRotaAtivo = !modoRotaAtivo;
+
+      const btn = document.getElementById("btnModoRota");
+      const legendaModoRota = document.getElementById("legendaModoRota");
+
+      if (modoRotaAtivo) {
+        btn.style.backgroundColor = "#000000";
+        btn.style.color = "#ffffff";
+        btn.style.borderColor = "#000000";
+        btn.innerText = "Modo Rota (Ativo)";
+        if (legendaModoRota) legendaModoRota.style.display = "inline";
+      } else {
+        btn.style.backgroundColor = "";
+        btn.style.color = "#e2e8f0";
+        btn.style.borderColor = "#64748b";
+        btn.innerText = "Modo Rota";
+        if (legendaModoRota) legendaModoRota.style.display = "none";
+      }
+
+      aplicarFiltrosGlobais();
+    }
+
+    function processarCliqueMedicao(latlng) {
+      pontosMedicao.push(latlng);
+
+      let markerTemp = L.circleMarker(latlng, { radius: 6, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 });
+      camadaMedicaoDistancia.addLayer(markerTemp);
+
+      if (pontosMedicao.length === 2) {
+        let pA = pontosMedicao[0];
+        let pB = pontosMedicao[1];
+        let distLinhaReta = calcularDistanciaValidaEntreCoordenadas(pA.lat, pA.lng, pB.lat, pB.lng);
+
+        let coordsStr = pA.lng + "," + pA.lat + ";" + pB.lng + "," + pB.lat;
+        fetch("https://router.project-osrm.org/route/v1/driving/" + coordsStr + "?overview=full&geometries=geojson")
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            let distRodovia = distLinhaReta;
+            if (data.routes && data.routes.length > 0) {
+              distRodovia = data.routes[0].distance / 1000;
+              let polyOSRM = L.geoJSON(data.routes[0].geometry, { style: { color: '#10b981', weight: 4, dashArray: '6,6' } });
+              camadaMedicaoDistancia.addLayer(polyOSRM);
+            } else {
+              let polyReta = L.polyline([pA, pB], { color: '#10b981', weight: 3, dashArray: '4,4' });
+              camadaMedicaoDistancia.addLayer(polyReta);
+            }
+
+            let htmlMed = '<div style="font-size:12px; text-align:center;">' +
+              '<b style="color:#10b981;">CÁLCULO DE DISTÂNCIA</b><br>' +
+              'Rodovia Real: <b>' + distRodovia.toFixed(1) + ' km</b><br>' +
+              'Linha Reta: <small>' + distLinhaReta.toFixed(1) + ' km</small><hr style="margin:4px 0;">' +
+              '<button onclick="toggleModoMedicao()" style="background:#ef4444; color:#fff; border:none; padding:2px 6px; border-radius:3px; cursor:pointer;">Limpar Medição</button>' +
+              '</div>';
+
+            L.popup().setLatLng(pB).setContent(htmlMed).openOn(map);
+          })
+          .catch(function() {
+            let polyReta = L.polyline([pA, pB], { color: '#10b981', weight: 3, dashArray: '4,4' });
+            camadaMedicaoDistancia.addLayer(polyReta);
+          });
+
+        modoMedicaoAtivo = false;
+        document.getElementById("btnModoMedicao").style.backgroundColor = "";
+        document.getElementById("btnModoMedicao").innerText = "Medir Distância";
+      }
+    }
+
+    function carregarCamadaColoridaEstados() {
+      fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          L.geoJSON(data, {
+            style: function(feature) {
+              let uf = feature.properties.sigla || feature.properties.sigla_uf || "";
+              let cor = coresEstados[uf] || "#64748b";
+              return { fillColor: cor, fillOpacity: 0.12, weight: 1.2, color: cor, opacity: 0.4 };
+            }
+          }).addTo(map);
+        })
+        .catch(function() { console.log("Fronteiras indisponíveis."); });
+    }
+
+    function carregarPontos() {
+      if (!sessaoToken) return;
+
+      let badge = document.getElementById("badgeTotal");
+      if (badge) badge.innerText = "Carregando...";
+      
+      idsExcluidosManual.clear();
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.sucesso) {
+            if (res && res.precisaLogin) { fazerLogout(); }
+            return;
+          }
+          let lista = res.dados || [];
+
+          todosOsPontos = lista;
+          
+          let qtdSemGps = lista.filter(function(i) { return i.semGps; }).length;
+          let elSemGps = document.getElementById("txtQtdSemGps");
+          if (elSemGps) elSemGps.innerText = qtdSemGps;
+
+          if (badge) badge.innerText = lista.length + " Registros";
+          
+          popularSeletoresDinamicos(lista);
+          aplicarFiltrosGlobais();
+          renderizarAreasAgendadasNoMapa();
+          
+          if (primeiraCargaGlobal) {
+            primeiraCargaGlobal = false;
+            setTimeout(function() {
+              if (map) map.invalidateSize();
+              if (lista.length > 0 && camadaMarcadores && camadaMarcadores.getLayers().length > 0) {
+                map.fitBounds(camadaMarcadores.getBounds().pad(0.1));
+              }
+            }, 400);
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error("Erro Apps Script:", err);
+          if (badge) badge.innerText = "Erro!";
+        })
+        .obterPendenciasGeolocalizadasComToken(sessaoToken);
+    }
+
+    function popularSeletoresDinamicos(lista) {
+      ufsDisponiveis = Array.from(new Set(lista.map(function(i) { return (i.uf || "").toString().trim().toUpperCase(); }).filter(function(u) { return u.length === 2; }))).sort();
+      cidadesDisponiveis = Array.from(new Set(lista.map(function(i) { return i.cidadeUf; }).filter(Boolean))).sort();
+      tiposDisponiveis = Array.from(new Set(lista.map(function(i) { return i.tipoLocalidade; }).filter(Boolean))).sort();
+      situacoesDisponiveis = Array.from(new Set(lista.map(function(i) { return i.situacao; }).filter(Boolean))).sort();
+
+      document.getElementById("containerCheckboxesUf").innerHTML = ufsDisponiveis.map(function(u) {
+        return '<label style="display:flex; align-items:center; gap:6px; padding:2px 0;">' +
+               '<input type="checkbox" value="' + escapeHtml(u) + '" checked onchange="atualizarTextosBotoes(); aplicarFiltrosGlobais();" class="chkUf">' +
+               '<span>' + escapeHtml(u) + '</span></label>';
+      }).join("");
+
+      renderizarCheckboxesCidades(cidadesDisponiveis);
+
+      document.getElementById("containerCheckboxesTipos").innerHTML = tiposDisponiveis.map(function(t) {
+        return '<label style="display:flex; align-items:center; gap:6px; padding:2px 0;">' +
+               '<input type="checkbox" value="' + escapeHtml(t) + '" checked onchange="atualizarTextosBotoes(); aplicarFiltrosGlobais();" class="chkTipo">' +
+               '<span>' + escapeHtml(t) + '</span></label>';
+      }).join("");
+
+      document.getElementById("containerCheckboxesSit").innerHTML = situacoesDisponiveis.map(function(s) {
+        return '<label style="display:flex; align-items:center; gap:6px; padding:2px 0;">' +
+               '<input type="checkbox" value="' + escapeHtml(s) + '" checked onchange="atualizarTextosBotoes(); aplicarFiltrosGlobais();" class="chkSit">' +
+               '<span>' + escapeHtml(s) + '</span></label>';
+      }).join("");
+
+      atualizarTextosBotoes();
+    }
+
+    function renderizarCheckboxesCidades(listaCidades) {
+      document.getElementById("containerCheckboxesCidade").innerHTML = listaCidades.map(function(c) {
+        return '<label style="display:flex; align-items:center; gap:6px; padding:2px 0;" class="lbl-cidade">' +
+               '<input type="checkbox" value="' + escapeHtml(c) + '" checked onchange="atualizarTextosBotoes(); aplicarFiltrosGlobais();" class="chkCidade">' +
+               '<span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(c) + '</span></label>';
+      }).join("");
+    }
+
+    function filtrarListaCidadesNoDrop() {
+      let busca = document.getElementById("inputBuscaCidadeDrop").value.toLowerCase();
+      let labels = document.querySelectorAll("#containerCheckboxesCidade label");
+      labels.forEach(function(l) {
+        let txt = l.textContent.toLowerCase();
+        l.style.display = txt.includes(busca) ? "flex" : "none";
+      });
+    }
+
+    function toggleDropdown(idMenu, e) {
+      e.stopPropagation();
+      let menu = document.getElementById(idMenu);
+      let estaAberto = !menu.classList.contains("hidden");
+      document.querySelectorAll('.dropdown-menu-box').forEach(function(d) { d.classList.add('hidden'); });
+      if (!estaAberto) menu.classList.remove("hidden");
+    }
+
+    function marcarGrupo(classeChk, marcar) {
+      document.querySelectorAll('.' + classeChk).forEach(function(c) { c.checked = marcar; });
+      atualizarTextosBotoes();
+      aplicarFiltrosGlobais();
+    }
+
+    function atualizarTextosBotoes() {
+      atualizarBadgeBotao('chkUf', ufsDisponiveis.length, 'txtBtnUf', 'UFs', 'Todas UFs');
+      atualizarBadgeBotao('chkCidade', cidadesDisponiveis.length, 'txtBtnCidade', 'Cidades', 'Todas Cidades');
+      atualizarBadgeBotao('chkTipo', tiposDisponiveis.length, 'txtBtnTipos', 'Tipos', 'Todos os Tipos');
+      atualizarBadgeBotao('chkSit', situacoesDisponiveis.length, 'txtBtnSituacao', 'Situações', 'Todas Situações');
+    }
+
+    function atualizarBadgeBotao(classeChk, total, idBtn, rotuloSingular, rotuloTodos) {
+      const chks = document.querySelectorAll('.' + classeChk);
+      const marcados = Array.from(chks).filter(function(c) { return c.checked; }).length;
+      const btn = document.getElementById(idBtn);
+
+      if (btn) {
+        if (marcados === 0) btn.innerText = "Nenhum";
+        else if (marcados === total) btn.innerText = rotuloTodos;
+        else btn.innerText = marcados + " " + rotuloSingular;
+      }
+    }
+
+    function filtrarApenasSemGps() {
+      apenasModoSemGps = !apenasModoSemGps;
+      aplicarFiltrosGlobais();
+    }
+
+    function limparFiltroDataBacklog() {
+      document.getElementById("inputDataBacklog").value = "";
+      aplicarFiltrosGlobais();
+    }
+
+    function limparTudoGeral() {
+      apenasModoSemGps = false;
+      idsExcluidosManual.clear();
+      document.getElementById("inputBuscaCidadeDrop").value = "";
+      document.getElementById("inputDataBacklog").value = "";
+      filtrarListaCidadesNoDrop();
+      limparSelecaoDesenho();
+
+      marcarGrupo('chkUf', true);
+      marcarGrupo('chkCidade', true);
+      marcarGrupo('chkTipo', true);
+      marcarGrupo('chkSit', true);
+    }
+
+    function obterClasseCorPorTipo(tipoStr) {
+      let t = (tipoStr || "").toUpperCase();
+      if (t.includes("DATA CENTER") || t.includes("DC")) return "dot-datacenter";
+      if (t.includes("TORRE") || t.includes("5G")) return "dot-torre";
+      if (t.includes("LOJA") || t.includes("SHOPPING")) return "dot-loja";
+      if (t.includes("ESTOQUE") || t.includes("CD")) return "dot-estoque";
+      return "dot-outros";
+    }
+
+    function calcularDistanciaValidaEntreCoordenadas(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function excluirPontoManualmente(idLinha) {
+      idsExcluidosManual.add(idLinha);
+      aplicarFiltrosGlobais();
+    }
+
+    function renderizarMarcadoresELinhasNoMapa(pontosValidosFiltroGerais, pontosFiltradosArea) {
+      camadaMarcadores.clearLayers();
+
+      let setIdsFiltradosArea = new Set(pontosFiltradosArea.map(function(p) { return p.idLinha; }));
+      const pontosComGps = pontosValidosFiltroGerais.filter(function(pt) { return !pt.semGps && pt.lat !== null && pt.lng !== null; });
+
+      let iconPartida = L.divIcon({ className: 'custom-dot dot-partida', iconSize: [22, 22], html: '🚩' });
+      let markerPartida = L.marker([pontoPartida.lat, pontoPartida.lng], { icon: iconPartida });
+      markerPartida.bindPopup('<div style="font-size:12px;"><b style="color:#d97706;">PONTO DE PARTIDA FIXO</b><br><b>' + escapeHtml(pontoPartida.nome) + '</b><br><small>' + pontoPartida.lat + ', ' + pontoPartida.lng + '</small></div>');
+      camadaMarcadores.addLayer(markerPartida);
+
+      pontosComGps.forEach(function(pt) {
+        let ehFiltradoArea = setIdsFiltradosArea.has(pt.idLinha);
+        let ehAgendado = !!(pt.equipe && pt.dataAgendadaIso);
+        let classeCor = obterClasseCorPorTipo(pt.tipoLocalidade);
+        
+        let ehInviavel = (pt.situacao || "").toUpperCase().includes("INVI");
+
+        let classeForma = ehInviavel ? 'custom-dot-inviavel' : ('custom-dot ' + classeCor);
+        let htmlInner = ehInviavel ? '⚠️' : '';
+
+        if (modoRotaAtivo && ehAgendado) {
+          classeForma += ' ponto-agendado-preto';
+        }
+
+        let classeFinal = classeForma + ((!formaDesenhadaAtiva || ehFiltradoArea) ? ' custom-dot-ativo' : '');
+
+        let iconCustom = L.divIcon({ className: classeFinal, iconSize: [16, 16], html: htmlInner });
+
+        let marker = L.marker([pt.lat, pt.lng], { icon: iconCustom });
+        
+        let divPopup = document.createElement("div");
+        divPopup.style.fontSize = "12px";
+
+        let strDias = (pt.diasPendente === "Hoje") ? "Hoje" : (pt.diasPendente + " dias");
+        let tagDias = "<span style='color:#fbbf24; font-weight:bold;'> " + escapeHtml(strDias) + "</span>";
+
+        let ehInviavelSit = (pt.situacao || "").toUpperCase().includes("INVI");
+        let tagSit = ehInviavelSit 
+          ? "<span style='color:#ef4444; font-weight:bold;'>INVIÁVEL</span>" 
+          : "<span style='color:#38bdf8; font-weight:bold;'>" + escapeHtml(pt.situacao) + "</span>";
+
+        let tagInfoAgendada = pt.equipe ? '<div style="color:#a855f7; font-weight:bold; font-size:10px; margin-top:2px;">Agendado: ' + escapeHtml(pt.equipe) + ' (' + escapeHtml(pt.dataAgendadaBr) + ')</div>' : "";
+
+        let badgeIdOSPopup = pt.idOS ? '<span class="badge-id-os">' + escapeHtml(pt.idOS) + '</span> ' : '';
+
+        if (modoRotaAtivo && ehAgendado) {
+          divPopup.innerHTML = badgeIdOSPopup + "<b>" + escapeHtml(pt.estabelecimento) + "</b><br>" +
+            "<span style='color:#94a3b8;'>[" + escapeHtml(pt.tipoLocalidade) + "] - " + escapeHtml(pt.cidadeUf) + "</span><hr style='margin:4px 0;'>" +
+            "<div style='background:#000000; color:#ffffff; padding:5px 7px; border-radius:5px; margin-bottom:6px;'>" +
+              "<b>📅 JÁ AGENDADO</b><br>" +
+              "Equipe/Técnico: <b>" + escapeHtml(pt.equipe) + "</b><br>" +
+              "Data: <b>" + escapeHtml(pt.dataAgendadaBr) + "</b>" +
+            "</div>" +
+            "<div style='margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;'>" +
+              "<button class='btn-ver-rota-agendada' style='background:#2563eb; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer; width:100%;'>Ver Roteiro Completo da Rota</button>" +
+            "</div>";
+
+          divPopup.querySelector('.btn-ver-rota-agendada').onclick = function() {
+            abrirRotaDetalhesCalendario(pt.dataAgendadaIso, pt.equipe);
+          };
+        } else {
+          divPopup.innerHTML = badgeIdOSPopup + "<b>" + escapeHtml(pt.estabelecimento) + "</b><br>" +
+            "<span style='color:#2563eb;'>[" + escapeHtml(pt.tipoLocalidade) + "] - " + escapeHtml(pt.uf) + "</span><br>" +
+            "<small>" + escapeHtml(pt.cidadeUf) + " - " + escapeHtml(pt.local) + "</small><hr style='margin:4px 0;'>" +
+            "<b>" + escapeHtml(pt.solicitacao) + "</b> (" + escapeHtml(pt.tipoEquipamento) + ")<br>" +
+            tagSit + tagDias + "<br>" +
+            tagInfoAgendada +
+            "<small style='color:#94a3b8;'>Plantonista: " + escapeHtml(pt.plantonista) + "</small><br>" +
+            "<div style='margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;'>" +
+              "<button class='btn-excluir-ponto' style='background:#f87171; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;'>Excluir da Seleção</button>" +
+            "</div>";
+
+          divPopup.querySelector('.btn-excluir-ponto').onclick = function() { excluirPontoManualmente(pt.idLinha); };
+        }
+
+        marker.bindPopup(divPopup);
+        camadaMarcadores.addLayer(marker);
+      });
+    }
+
+    function renderizarAreasAgendadasNoMapa() {
+      if (!camadaAreasAgendadas) return;
+      camadaAreasAgendadas.clearLayers();
+
+      let mapaAreas = {};
+      todosOsPontos.forEach(function(p) {
+        if (p.dataAgendadaIso && p.equipe && p.areaGeoJson) {
+          let chaveArea = p.dataAgendadaIso + "||" + p.equipe;
+          if (!mapaAreas[chaveArea]) {
+            mapaAreas[chaveArea] = {
+              dataBr: p.dataAgendadaBr,
+              equipe: p.equipe,
+              geoJson: p.areaGeoJson,
+              qtd: 0
+            };
+          }
+          mapaAreas[chaveArea].qtd++;
+        }
+      });
+
+      Object.keys(mapaAreas).forEach(function(chave) {
+        let item = mapaAreas[chave];
+        try {
+          let geoData = JSON.parse(item.geoJson);
+          let shapeLayer = null;
+
+          if (geoData.tipo === "circulo") {
+            shapeLayer = L.circle([geoData.lat, geoData.lng], {
+              radius: geoData.raio,
+              color: '#a855f7',
+              weight: 2,
+              dashArray: '6, 6',
+              fillColor: '#a855f7',
+              fillOpacity: 0.18
+            });
+          } else if (geoData.tipo === "retangulo") {
+            shapeLayer = L.rectangle(geoData.bounds, {
+              color: '#a855f7',
+              weight: 2,
+              dashArray: '6, 6',
+              fillColor: '#a855f7',
+              fillOpacity: 0.18
+            });
+          } else if (geoData.tipo === "poligono") {
+            shapeLayer = L.polygon(geoData.latlngs, {
+              color: '#a855f7',
+              weight: 2,
+              dashArray: '6, 6',
+              fillColor: '#a855f7',
+              fillOpacity: 0.18
+            });
+          }
+
+          if (shapeLayer) {
+            shapeLayer.bindPopup(
+              '<div style="font-size:12px;">' +
+                '<b style="color:#8b5cf6;">ÁREA AGENDADA / RESERVADA</b><br>' +
+                '<b>Equipe:</b> ' + escapeHtml(item.equipe) + '<br>' +
+                '<b>Data do Atendimento:</b> ' + escapeHtml(item.dataBr) + '<br>' +
+                '<small style="color:#94a3b8;">' + item.qtd + ' pendência(s) na zona</small>' +
+              '</div>'
+            );
+            camadaAreasAgendadas.addLayer(shapeLayer);
+          }
+        } catch (e) {
+          console.error("Erro ao desenhar área reservada:", e);
+        }
+      });
+    }
+
+    function renderizarTabela(listaFiltrada) {
+      pontosAtualmenteExibidos = Array.from(listaFiltrada);
+
+      const subtitulo = document.getElementById("subtituloSelecao");
+      if (subtitulo) {
+        subtitulo.innerText = "Filtro Aplicado: " + pontosAtualmenteExibidos.length + " registro(s).";
+      }
+
+      const tbody = document.getElementById("corpoTabela");
+
+      if (pontosAtualmenteExibidos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">Nenhum registro encontrado para essa seleção.</td></tr>';
+        renderizarTabelaRoteiro([]);
+        return;
+      }
+
+      tbody.innerHTML = pontosAtualmenteExibidos.map(function(pt, idx) {
+        let ehInviavel = (pt.situacao || "").toUpperCase().includes("INVI");
+        let tagSituacaoTabela = ehInviavel 
+          ? '<b style="color:#ef4444;">⚠️ INVIÁVEL</b>' 
+          : '<b style="color:#38bdf8;">' + escapeHtml(pt.situacao) + '</b>';
+
+        let tagGpsAviso = pt.semGps 
+          ? '<span style="color:#fbbf24; font-size:9px; font-weight:bold;">⚠️ Sem GPS</span>'
+          : '<small style="color:#64748b;">' + escapeHtml(pt.tipoLocalidade) + '</small>';
+
+        let valDias = (pt.diasPendente === "Hoje")
+          ? '<span style="color:#34d399; font-weight:bold;">Hoje</span>'
+          : (pt.diasPendente && pt.diasPendente !== "—" 
+              ? '<span style="color:#fbbf24; font-weight:bold;">' + escapeHtml(pt.diasPendente) + ' d</span>'
+              : '<span style="color:#64748b;">—</span>');
+
+        let clickFoco = pt.semGps ? '' : 'focarPonto(' + pt.lat + ', ' + pt.lng + ')';
+
+        let strIdOS = pt.idOS || '—';
+
+        return '<tr>' +
+          '<td class="col-pdf-only" style="display:none; font-weight:bold;">' + escapeHtml(strIdOS) + '</td>' +
+          '<td onclick="' + clickFoco + '" style="cursor:pointer;"><span class="badge-id-os">' + escapeHtml(strIdOS) + '</span><br><b>' + escapeHtml(pt.cidadeUf) + '</b></td>' +
+          '<td onclick="' + clickFoco + '" style="cursor:pointer;"><b>' + escapeHtml(pt.estabelecimento) + '</b><br>' + tagGpsAviso + '</td>' +
+          '<td class="col-pdf-only" style="display:none;">' + escapeHtml(pt.local) + '</td>' +
+          '<td>' + escapeHtml(pt.solicitacao) + '<br>' + tagSituacaoTabela + '</td>' +
+          '<td class="col-pdf-only" style="display:none;">' + escapeHtml(pt.tipoEquipamento) + '</td>' +
+          '<td class="col-pdf-only" style="display:none; font-size:9px;">' + escapeHtml(pt.observacao) + '</td>' +
+          '<td class="col-dias-tela">' + valDias + '</td>' +
+          '<td class="col-acoes-tela" style="text-align:center;">' +
+            '<div style="display:flex; gap:4px; justify-content:center;">' +
+              '<button onclick="abrirModalDetalhes(' + idx + ')" class="btn-filt" style="padding: 2px 6px; font-size: 10px; border-color:#38bdf8; color:#38bdf8;" title="Ver detalhes">Detalhes</button>' +
+              '<button onclick="excluirPontoManualmente(\'' + pt.idLinha + '\')" class="btn-filt" style="padding: 2px 6px; font-size: 10px; border-color:#f87171; color:#f87171;" title="Remover da seleção atual">Remover</button>' +
+            '</div>' +
+          '</td>' +
+          '</tr>';
+      }).join("");
+
+      renderizarTabelaRoteiro(pontosAtualmenteExibidos);
+    }
+
+    function abrirModalDetalhes(index) {
+      let item = pontosAtualmenteExibidos[index];
+      if (!item) return;
+
+      document.getElementById("modIdOS").innerText = item.idOS || "—";
+      document.getElementById("modEstab").innerText = item.estabelecimento || "—";
+      document.getElementById("modCidadeUf").innerText = item.cidadeUf || "—";
+      document.getElementById("modLocal").innerText = item.local || "—";
+      document.getElementById("modTipoLocal").innerText = item.tipoLocalidade || "—";
+      document.getElementById("modSolicitacao").innerText = item.solicitacao || "—";
+      
+      let ehInviavel = (item.situacao || "").toUpperCase().includes("INVI");
+      document.getElementById("modSituacao").innerHTML = ehInviavel 
+        ? "<b style='color:#ef4444;'>INVIÁVEL</b>" 
+        : "<b style='color:#38bdf8;'>" + escapeHtml(item.situacao) + "</b>";
+
+      document.getElementById("modTipoEquip").innerText = item.tipoEquipamento || "—";
+      document.getElementById("modDataInicial").innerText = item.dataInicial || "—";
+      document.getElementById("modDiasPendente").innerText = (item.diasPendente === "Hoje") ? "Hoje" : ((item.diasPendente && item.diasPendente !== "—") ? item.diasPendente + " dias" : "—");
+      document.getElementById("modPlantonista").innerText = item.plantonista || "—";
+      document.getElementById("modDataFinal").innerText = item.dataFinal || "—";
+      document.getElementById("modObservacao").innerText = item.observacao || "Nenhuma observação informada.";
+
+      document.getElementById("modalDetalhes").classList.remove("hidden");
+    }
+
+    function fecharModalDetalhes(event) {
+      if (event && event.target !== document.getElementById("modalDetalhes")) return;
+      document.getElementById("modalDetalhes").classList.add("hidden");
+    }
+
+    function renderizarTabelaRoteiro(lista) {
+      const tbodyRoteiro = document.getElementById("corpoTabelaRoteiro");
+      if (!tbodyRoteiro) return;
+
+      let htmlRows = '<tr>' +
+          '<td><b style="color:#d97706;">SAÍDA</b></td>' +
+          '<td><b>' + escapeHtml(pontoPartida.nome) + '</b></td>' +
+          '<td>Partida Base</td>' +
+          '<td style="font-family:monospace;">' + pontoPartida.lat.toFixed(6) + ', ' + pontoPartida.lng.toFixed(6) + '</td>' +
+          '<td style="text-align:center;"><a href="https://www.google.com/maps/search/?api=1&query=' + pontoPartida.lat + ',' + pontoPartida.lng + '" target="_blank">Rota</a></td>' +
+        '</tr>';
+
+      let listaOrigem = lista.filter(function(pt) { return !pt.semGps && pt.lat !== null && pt.lng !== null; });
+
+      if (listaOrigem.length === 0) {
+        tbodyRoteiro.innerHTML = htmlRows + '<tr><td colspan="5" style="text-align: center; padding: 8px;">Nenhuma parada selecionada.</td></tr>';
+        return;
+      }
+
+      let locaisUnicos = [];
+      let mapaLocais = {};
+
+      listaOrigem.forEach(function(pt) {
+        let latStr = pt.lat !== null ? pt.lat.toFixed(5) : "0";
+        let lngStr = pt.lng !== null ? pt.lng.toFixed(5) : "0";
+        let chaveUnicaLocal = (pt.estabelecimento || "").trim().toUpperCase() + "||" + (pt.cidadeUf || "").trim().toUpperCase() + "||" + latStr + "||" + lngStr;
+
+        if (!mapaLocais[chaveUnicaLocal]) {
+          mapaLocais[chaveUnicaLocal] = {
+            estabelecimento: pt.estabelecimento,
+            tipoLocalidade: pt.tipoLocalidade || pt.tipo || "Local",
+            cidadeUf: pt.cidadeUf,
+            lat: pt.lat,
+            lng: pt.lng,
+            qtdPendencias: 0,
+            idsOS: []
+          };
+          locaisUnicos.push(mapaLocais[chaveUnicaLocal]);
+        }
+        mapaLocais[chaveUnicaLocal].qtdPendencias += 1;
+        if (pt.idOS) mapaLocais[chaveUnicaLocal].idsOS.push(pt.idOS);
+      });
+
+      htmlRows += locaisUnicos.map(function(loc, idx) {
+        let tagQtd = loc.qtdPendencias > 1 
+          ? ' <span style="color:#2563eb; font-weight:bold; font-size:10px;">(' + loc.qtdPendencias + ' Pendências)</span>' 
+          : ' <span style="color:#64748b; font-size:10px;">(1 Pendência)</span>';
+
+        let strIDs = loc.idsOS.length > 0 ? '<small style="color:#38bdf8; display:block;">OS: ' + escapeHtml(loc.idsOS.join(", ")) + '</small>' : '';
+
+        return '<tr>' +
+          '<td><b>PARADA ' + (idx + 1) + '</b></td>' +
+          '<td><b>' + escapeHtml(loc.estabelecimento) + '</b>' + tagQtd + '<br><small style="color:#2563eb;">' + escapeHtml(loc.tipoLocalidade) + '</small>' + strIDs + '</td>' +
+          '<td>' + escapeHtml(loc.cidadeUf) + '</td>' +
+          '<td style="font-family:monospace;">' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) + '</td>' +
+          '<td style="text-align:center;"><a href="https://www.google.com/maps/search/?api=1&query=' + loc.lat + ',' + loc.lng + '" target="_blank">Rota</a></td>' +
+        '</tr>';
+      }).join("");
+
+      tbodyRoteiro.innerHTML = htmlRows;
+    }
+
+    function aplicarFiltrosGlobais() {
+      let resultado = Array.from(todosOsPontos);
+
+      const ufsSel = Array.from(document.querySelectorAll('.chkUf')).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+      const cidadesSel = Array.from(document.querySelectorAll('.chkCidade')).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+      const tiposSel = Array.from(document.querySelectorAll('.chkTipo')).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+      const sitSel = Array.from(document.querySelectorAll('.chkSit')).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+
+      resultado = resultado.filter(function(i) { return !idsExcluidosManual.has(i.idLinha); });
+
+      if (apenasModoSemGps) {
+        resultado = resultado.filter(function(i) { return i.semGps; });
+      }
+
+      resultado = resultado.filter(function(i) { return ufsSel.includes(i.uf) || i.semGps; });
+      resultado = resultado.filter(function(i) { return cidadesSel.includes(i.cidadeUf) || i.semGps; });
+      resultado = resultado.filter(function(i) { return tiposSel.includes(i.tipoLocalidade) || i.semGps; });
+      resultado = resultado.filter(function(i) { return sitSel.includes(i.situacao) || i.semGps; });
+
+      const valDataLim = document.getElementById("inputDataBacklog").value;
+      if (valDataLim) {
+        let tLimite = new Date(valDataLim + "T23:59:59").getTime();
+
+        resultado = resultado.filter(function(i) {
+          if (!i.dataInicialIso && !i.dataInicial) return false;
+
+          let tItem = 0;
+          if (i.dataInicialIso) {
+            tItem = new Date(i.dataInicialIso + "T00:00:00").getTime();
+          } else if (i.dataInicial) {
+            let limpo = i.dataInicial.toString().split(' ')[0];
+            let partes = limpo.split('/');
+            if (partes.length === 3) {
+              tItem = new Date(partes[2] + "-" + partes[1] + "-" + partes[0] + "T00:00:00").getTime();
+            }
+          }
+
+          return tItem > 0 && tItem <= tLimite;
+        });
+      }
+
+      let pontosFiltradosComArea = Array.from(resultado);
+
+      if (formaDesenhadaAtiva) {
+        if (formaDesenhadaAtiva instanceof L.Circle) {
+          let centro = formaDesenhadaAtiva.getLatLng(), raio = formaDesenhadaAtiva.getRadius();
+          pontosFiltradosComArea = pontosFiltradosComArea.filter(function(pt) { return !pt.semGps && centro.distanceTo(L.latLng(pt.lat, pt.lng)) <= raio; });
+        } else if (formaDesenhadaAtiva instanceof L.Rectangle) {
+          let bounds = formaDesenhadaAtiva.getBounds();
+          pontosFiltradosComArea = pontosFiltradosComArea.filter(function(pt) { return !pt.semGps && bounds.contains(L.latLng(pt.lat, pt.lng)); });
+        } else if (formaDesenhadaAtiva instanceof L.Polygon) {
+          let poly = formaDesenhadaAtiva.getLatLngs()[0];
+          pontosFiltradosComArea = pontosFiltradosComArea.filter(function(pt) { return !pt.semGps && pontoEmPoligonoLeaflet(L.latLng(pt.lat, pt.lng), poly); });
+        }
+        document.getElementById("subtituloSelecao").innerText = "Filtro Aplicado: " + pontosFiltradosComArea.length + " registro(s).";
+      } else if (apenasModoSemGps) {
+        document.getElementById("subtituloSelecao").innerText = "Exibindo apenas os " + resultado.length + " registros SEM GPS.";
+      } else {
+        document.getElementById("subtituloSelecao").innerText = "Filtro Aplicado: " + resultado.length + " registro(s).";
+      }
+
+      renderizarMarcadoresELinhasNoMapa(resultado, pontosFiltradosComArea);
+      renderizarTabela(pontosFiltradosComArea);
+    }
+
+    function pontoEmPoligonoLeaflet(latlng, poly) {
+      let x = latlng.lat, y = latlng.lng, inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        let xi = poly[i].lat, yi = poly[i].lng, xj = poly[j].lat, yj = poly[j].lng;
+        let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function limparSelecaoDesenho() {
+      drawnItems.clearLayers();
+      formaDesenhadaAtiva = null;
+      aplicarFiltrosGlobais();
+    }
+
+    function focarPonto(lat, lng) {
+      if (lat !== null && lng !== null) {
+        map.setView([lat, lng], 16, { animate: true });
+      }
+    }
+
+    function abrirModalAgendarRota() {
+      if (!pontosAtualmenteExibidos || pontosAtualmenteExibidos.length === 0) {
+        alert("Nenhum ponto selecionado no mapa para agendar.");
+        return;
+      }
+      document.getElementById("inputDataAgendamentoModal").value = new Date().toISOString().split('T')[0];
+      document.getElementById("modalAgendarRota").classList.remove("hidden");
+    }
+
+    function fecharModalAgendarRota(event) {
+      if (event && event.target !== document.getElementById("modalAgendarRota")) return;
+      document.getElementById("modalAgendarRota").classList.add("hidden");
+    }
+
+    function confirmarAgendamentoRota() {
+      const dataAg = document.getElementById("inputDataAgendamentoModal").value;
+      const equipe = document.getElementById("inputEquipeModal").value.trim();
+
+      if (!dataAg) { alert("Selecione uma data para o agendamento."); return; }
+      if (!equipe) { alert("Digite o nome da equipe ou técnico responsável."); return; }
+
+      let idsOSParaAgendar = pontosAtualmenteExibidos.map(function(p) { return p.idOS || p.idLinha; }).filter(Boolean);
+
+      let areaGeoJsonStr = "";
+      if (formaDesenhadaAtiva) {
+        if (formaDesenhadaAtiva instanceof L.Circle) {
+          let centro = formaDesenhadaAtiva.getLatLng();
+          areaGeoJsonStr = JSON.stringify({ tipo: "circulo", lat: centro.lat, lng: centro.lng, raio: formaDesenhadaAtiva.getRadius() });
+        } else if (formaDesenhadaAtiva instanceof L.Rectangle) {
+          areaGeoJsonStr = JSON.stringify({ tipo: "retangulo", bounds: formaDesenhadaAtiva.getBounds() });
+        } else if (formaDesenhadaAtiva instanceof L.Polygon) {
+          areaGeoJsonStr = JSON.stringify({ tipo: "poligono", latlngs: formaDesenhadaAtiva.getLatLngs()[0] });
+        }
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.sucesso) {
+            alert(res.mensagem);
+            fecharModalAgendarRota();
+            limparSelecaoDesenho();
+            carregarPontos();
+          } else {
+            alert("Erro: " + res.mensagem);
+          }
+        })
+        .withFailureHandler(function(e) {
+          alert("Erro: " + e.message);
+        })
+        .agendarRotaLote(sessaoToken, {
+          idsOS: idsOSParaAgendar,
+          idsLinha: idsOSParaAgendar,
+          dataAgendamento: dataAg,
+          equipe: equipe,
+          areaGeoJson: areaGeoJsonStr
+        });
+    }
+
+    function navegarMesCalendario(direcao) {
+      mesAtualCal += direcao;
+      if (mesAtualCal > 11) { mesAtualCal = 0; anoAtualCal++; }
+      if (mesAtualCal < 0) { mesAtualCal = 11; anoAtualCal--; }
+      montarCalendarioAgenda();
+    }
+
+    function montarCalendarioAgenda() {
+      const grid = document.getElementById("gridDiasCalendario");
+      if (!grid) return;
+      grid.innerHTML = "";
+
+      document.getElementById("txtMesAnoCalendario").innerText = NOMES_MESES[mesAtualCal] + " " + anoAtualCal;
+
+      const primeiroDiaSemana = new Date(anoAtualCal, mesAtualCal, 1).getDay();
+      const totalDiasMes = new Date(anoAtualCal, mesAtualCal + 1, 0).getDate();
+
+      for (let i = 0; i < primeiroDiaSemana; i++) {
+        let divVazia = document.createElement("div");
+        grid.appendChild(divVazia);
+      }
+
+      let hojeObj = new Date();
+      let hojeIso = hojeObj.toISOString().split('T')[0];
+
+      for (let d = 1; d <= totalDiasMes; d++) {
+        let diaIso = anoAtualCal + "-" + (mesAtualCal + 1).toString().padStart(2, '0') + "-" + d.toString().padStart(2, '0');
+        let ehHoje = (diaIso === hojeIso);
+
+        let boxDia = document.createElement("div");
+        boxDia.className = "cal-day-box " + (ehHoje ? "hoje-highlight" : "");
+        boxDia.id = "calbox-" + diaIso;
+
+        boxDia.addEventListener("dragover", function(e) {
+          e.preventDefault();
+          boxDia.style.borderColor = "#10b981";
+        });
+        boxDia.addEventListener("dragleave", function() {
+          boxDia.style.borderColor = "#334155";
+        });
+        boxDia.addEventListener("drop", function(e) {
+          boxDia.style.borderColor = "#334155";
+          aoSoltarEquipeNoDia(e, diaIso);
+        });
+
+        let pontosDoDia = todosOsPontos.filter(function(p) { 
+          return p.dataAgendadaIso === diaIso && p.equipe && p.areaGeoJson && p.areaGeoJson.trim() !== ""; 
+        });
+        let equipesUnicas = Array.from(new Set(pontosDoDia.map(function(p) { return p.equipe; })));
+
+        let htmlPilulas = "";
+        equipesUnicas.forEach(function(eq) {
+          let eqUpper = eq.trim().toUpperCase();
+          let estiloCor = coresEquipes[eqUpper] || "background:#475569; color:#ffffff;";
+          let qtd = pontosDoDia.filter(function(p) { return p.equipe === eq; }).length;
+
+          htmlPilulas += '<span class="badge-equipe-pilula" style="' + estiloCor + '" draggable="true" ondragstart="aoArrastarEquipe(event, \'' + escapeHtml(eq) + '\', \'' + diaIso + '\')" onclick="abrirRotaDetalhesCalendario(\'' + diaIso + '\', \'' + escapeHtml(eq) + '\')">' + escapeHtml(eq) + ' (' + qtd + ')</span>';
+        });
+
+        boxDia.innerHTML = 
+          '<div style="font-size: 11px; font-weight: bold; color: ' + (ehHoje ? '#10b981' : '#94a3b8') + ';">' + d + '</div>' +
+          '<div style="display: flex; flex-direction: column; gap: 2px; flex: 1; justify-content: flex-start; overflow-y: auto;">' +
+            htmlPilulas +
+          '</div>';
+
+        grid.appendChild(boxDia);
+      }
+    }
+
+    function aoArrastarEquipe(e, equipe, dataOrigemIso) {
+      e.dataTransfer.setData("text/plain", JSON.stringify({
+        equipe: equipe,
+        dataOrigem: dataOrigemIso
+      }));
+    }
+
+    function aoSoltarEquipeNoDia(e, dataDestinoIso) {
+      e.preventDefault();
+      try {
+        let dadosArrastados = JSON.parse(e.dataTransfer.getData("text/plain"));
+        let equipe = dadosArrastados.equipe;
+        let dataOrigem = dadosArrastados.dataOrigem;
+
+        if (dataOrigem === dataDestinoIso) return;
+
+        if (!confirm("Deseja reagendar toda a rota/área de [" + equipe + "] de " + dataOrigem.split('-').reverse().join('/') + " para " + dataDestinoIso.split('-').reverse().join('/') + "?")) return;
+
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res.sucesso) {
+              alert(res.mensagem);
+              carregarPontos();
+            } else {
+              alert("Erro: " + res.mensagem);
+            }
+          })
+          .reagendarRotaLote(sessaoToken, equipe, dataOrigem, dataDestinoIso);
+
+      } catch (err) {
+        console.error("Erro no Drag & Drop:", err);
+      }
+    }
+
+    function abrirRotaDetalhesCalendario(dataIso, equipe) {
+      rotaAtivaCalData = dataIso;
+      rotaAtivaCalEquipe = equipe;
+
+      let pontosDaRota = todosOsPontos.filter(function(p) { 
+        return p.dataAgendadaIso === dataIso && p.equipe && p.equipe.trim().toUpperCase() === equipe.trim().toUpperCase(); 
+      });
+
+      if (pontosDaRota.length === 0) return;
+
+      document.getElementById("txtTituloModalRotaCal").innerText = "Roteiro Agendado - " + equipe;
+      document.getElementById("txtSubtituloModalRotaCal").innerText = "Data Programada: " + dataIso.split('-').reverse().join('/') + " (" + pontosDaRota.length + " ocorrência(s))";
+
+      let htmlTabela = '<table style="width:100%; border-collapse:collapse; font-size:11px;">' +
+        '<thead>' +
+          '<tr style="background:#0f172a; color:#94a3b8; text-transform:uppercase; font-size:9px;">' +
+            '<th style="padding:6px; border:1px solid #334155;">ID OS</th>' +
+            '<th style="padding:6px; border:1px solid #334155;">Cidade</th>' +
+            '<th style="padding:6px; border:1px solid #334155;">Estabelecimento / Local</th>' +
+            '<th style="padding:6px; border:1px solid #334155;">Solicitação</th>' +
+            '<th style="padding:6px; border:1px solid #334155;">Equipamento</th>' +
+            '<th style="padding:6px; border:1px solid #334155;">Observação</th>' +
+            '<th style="padding:6px; border:1px solid #334155; text-align:center;">Ação</th>' +
+          '</tr>' +
+        '</thead><tbody>';
+
+      pontosDaRota.forEach(function(pt) {
+        let strIdOS = pt.idOS || '—';
+        htmlTabela += '<tr>' +
+          '<td style="padding:6px; border:1px solid #334155;"><span class="badge-id-os">' + escapeHtml(strIdOS) + '</span></td>' +
+          '<td style="padding:6px; border:1px solid #334155;"><b>' + escapeHtml(pt.cidadeUf) + '</b></td>' +
+          '<td style="padding:6px; border:1px solid #334155;"><b>' + escapeHtml(pt.estabelecimento) + '</b><br><small style="color:#60a5fa;">' + escapeHtml(pt.local) + '</small></td>' +
+          '<td style="padding:6px; border:1px solid #334155;">' + escapeHtml(pt.solicitacao) + '</td>' +
+          '<td style="padding:6px; border:1px solid #334155;"><small style="color:#94a3b8;">' + escapeHtml(pt.tipoEquipamento) + '</small></td>' +
+          '<td style="padding:6px; border:1px solid #334155; font-size:10px; color:#cbd5e1;">' + escapeHtml(pt.observacao) + '</td>' +
+          '<td style="padding:6px; border:1px solid #334155; text-align:center;">' +
+            '<button onclick="cancelarItemIndividualOS(\'' + strIdOS + '\')" class="btn-filt" style="padding:2px 6px; font-size:9px; background:#ef4444; color:#fff;" title="Remover apenas esta OS do agendamento">Cancelar OS</button>' +
+          '</td>' +
+        '</tr>';
+      });
+
+      htmlTabela += '</tbody></table>';
+      document.getElementById("corpoModalRotaCal").innerHTML = htmlTabela;
+      document.getElementById("modalRotaCalendario").classList.remove("hidden");
+    }
+
+    function cancelarItemIndividualOS(idOS) {
+      if (!idOS || idOS === '—') {
+        alert("ID da OS inválido.");
+        return;
+      }
+      if (!confirm("Deseja realmente cancelar o agendamento apenas da " + idOS + "?")) return;
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.sucesso) {
+            alert(res.mensagem);
+            fecharModalRotaCalendario();
+            carregarPontos();
+          } else {
+            alert("Erro: " + res.mensagem);
+          }
+        })
+        .cancelarAgendamentoPorOS(sessaoToken, idOS);
+    }
+
+    function fecharModalRotaCalendario(event) {
+      if (event && event.target !== document.getElementById("modalRotaCalendario")) return;
+      document.getElementById("modalRotaCalendario").classList.add("hidden");
+    }
+
+    function imprimirPdfExclusivoAgenda() {
+      if (!rotaAtivaCalData || !rotaAtivaCalEquipe) return;
+      let pontosDaRota = todosOsPontos.filter(function(p) { 
+        return p.dataAgendadaIso === rotaAtivaCalData && p.equipe && p.equipe.trim().toUpperCase() === rotaAtivaCalEquipe.trim().toUpperCase(); 
+      });
+      if (pontosDaRota.length === 0) return;
+
+      renderizarTabela(pontosDaRota);
+      window.print();
+    }
+
+    function carregarRotaNoMapaEIr() {
+      if (!rotaAtivaCalData || !rotaAtivaCalEquipe) return;
+      
+      let pontosDaRota = todosOsPontos.filter(function(p) { 
+        return p.dataAgendadaIso === rotaAtivaCalData && 
+               p.equipe && 
+               p.equipe.trim().toUpperCase() === rotaAtivaCalEquipe.trim().toUpperCase(); 
+      });
+      
+      if (pontosDaRota.length === 0) {
+        alert("Nenhum ponto encontrado para esta rota.");
+        return;
+      }
+
+      fecharModalRotaCalendario();
+      alternarAbaPrincipal('mapa');
+
+      drawnItems.clearLayers();
+      formaDesenhadaAtiva = null;
+
+      let pontoComArea = pontosDaRota.find(function(p) { return p.areaGeoJson && p.areaGeoJson.trim() !== ""; });
+      
+      if (pontoComArea) {
+        try {
+          let geoData = JSON.parse(pontoComArea.areaGeoJson);
+          
+          if (geoData.tipo === "circulo") {
+            formaDesenhadaAtiva = L.circle([geoData.lat, geoData.lng], {
+              radius: geoData.raio, color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2
+            });
+          } else if (geoData.tipo === "retangulo") {
+            formaDesenhadaAtiva = L.rectangle(geoData.bounds, {
+              color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2
+            });
+          } else if (geoData.tipo === "poligono") {
+            formaDesenhadaAtiva = L.polygon(geoData.latlngs, {
+              color: '#8b5cf6', weight: 2, fillColor: '#8b5cf6', fillOpacity: 0.2
+            });
+          }
+
+          if (formaDesenhadaAtiva) {
+            drawnItems.addLayer(formaDesenhadaAtiva);
+          }
+        } catch(e) {
+          console.error("Erro ao redesenhar área salva:", e);
+        }
+      }
+
+      renderizarMarcadoresELinhasNoMapa(pontosDaRota, pontosDaRota);
+      renderizarTabela(pontosDaRota);
+
+      let pontosComGps = pontosDaRota.filter(function(p) { return !p.semGps && p.lat !== null && p.lng !== null; });
+      if (pontosComGps.length > 0) {
+        let bounds = L.latLngBounds(pontosComGps.map(function(p) { return [p.lat, p.lng]; }));
+        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
+      } else if (formaDesenhadaAtiva) {
+        map.fitBounds(formaDesenhadaAtiva.getBounds(), { padding: [50, 50] });
+      }
+    }
+
+    function concluirRotaCal() {
+      if (!rotaAtivaCalData || !rotaAtivaCalEquipe) return;
+      if (!confirm("Deseja concluir a rota da equipe [" + rotaAtivaCalEquipe + "] no dia " + rotaAtivaCalData.split('-').reverse().join('/') + "? Apenas a área desenhada será removida do mapa.")) return;
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.sucesso) {
+            alert(res.mensagem);
+            fecharModalRotaCalendario();
+            carregarPontos();
+          } else {
+            alert("Erro: " + res.mensagem);
+          }
+        })
+        .concluirRotaManualmente(sessaoToken, rotaAtivaCalEquipe, rotaAtivaCalData);
+    }
+
+    function cancelarAgendamentoRotaCal() {
+      if (!rotaAtivaCalData || !rotaAtivaCalEquipe) return;
+      
+      let dataFormatadaBr = rotaAtivaCalData.split('-').reverse().join('/');
+      
+      if (!confirm("Deseja cancelar TODAS as OSs agendadas para [" + rotaAtivaCalEquipe + "] no dia " + dataFormatadaBr + "? A data, o técnico e a área desenhada serão limpos.")) {
+        return;
+      }
+
+      let dataIsoLimpa = rotaAtivaCalData;
+      if (rotaAtivaCalData.includes('/')) {
+        dataIsoLimpa = rotaAtivaCalData.split('/').reverse().join('-');
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.sucesso) {
+            alert(res.mensagem || "Agendamento da rota cancelado com sucesso!");
+            fecharModalRotaCalendario();
+            carregarPontos();
+          } else {
+            alert("Erro: " + (res ? res.mensagem : "Falha ao processar cancelamento."));
+          }
+        })
+        .withFailureHandler(function(err) {
+          alert("Erro na execução do script: " + err.message);
+        })
+        .reagendarRotaLote(sessaoToken, rotaAtivaCalEquipe, dataIsoLimpa, "");
+    }
+
+    function exportarParaCSV() {
+      if (!pontosAtualmenteExibidos || pontosAtualmenteExibidos.length === 0) {
+        alert("Nenhum registro para exportar.");
+        return;
+      }
+
+      let conteudoCsv = "\uFEFFID_OS;Plantonista;Situacao;Local;DataInicial;DataFinal;Observacao;Tipo;Cidade/UF;Estabelecimento;TipoEquipamento;DiasPendente;DataAgendamento;Equipe;Lat;Lng;GPS_Status\n";
+
+      pontosAtualmenteExibidos.forEach(function(pt) {
+        let linha = [
+          "\"" + (pt.idOS || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.plantonista || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.situacao || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.local || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.dataInicial || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.dataFinal || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.observacao || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.solicitacao || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.cidadeUf || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.estabelecimento || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.tipoEquipamento || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.diasPendente || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.dataAgendadaBr || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.equipe || '').replace(/"/g, '""') + "\"",
+          "\"" + (pt.lat !== null ? pt.lat : '') + "\"",
+          "\"" + (pt.lng !== null ? pt.lng : '') + "\"",
+          "\"" + (pt.semGps ? 'SEM GPS' : 'OK') + "\""
+        ];
+        conteudoCsv += linha.join(";") + "\n";
+      });
+
+      let blob = new Blob([conteudoCsv], { type: 'text/csv;charset=utf-8;' });
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement("a");
+      a.href = url;
+      a.download = "Rotas_Ocorrencias_" + new Date().toISOString().split('T')[0] + ".csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function gerarRelatorioPDF() {
+      if (!pontosAtualmenteExibidos || pontosAtualmenteExibidos.length === 0) {
+        alert("Nenhum registro para gerar o PDF.");
+        return;
+      }
+      window.print();
+    }
+  </script>
+</body>
+</html>
